@@ -4,9 +4,9 @@ function help_menu() {
   echo -e "\n\n"
   echo -e "\t rsshync commands: \n"
   echo -e "\t\t --help       Displays this page of commands"
-  echo -e "\t\t --help-eg    Displays a list of example commands"
-  echo -e "\t\t --status     Checks the ssh status of a connection"
-  echo -e "\t\t --add        Add a rsshync connection: rsshync --add [HOST@ADDRESS] {PORT}"
+  #echo -e "\t\t --help-eg    Displays a list of example commands"
+  #echo -e "\t\t --status     Checks the ssh status of a connection"
+  #echo -e "\t\t --add        Add a rsshync connection: rsshync --add [HOST@ADDRESS] {PORT}"
   #echo -e "\t\t a"
   return 0
 }
