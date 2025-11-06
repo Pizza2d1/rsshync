@@ -1,4 +1,16 @@
+#!/bin/bash
 
+source functions
 if [[ -z $1 ]]; then 
-  echo "balls"
+  help_menu
 fi
+
+
+
+
+
+
+
+
+
+
