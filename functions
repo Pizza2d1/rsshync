@@ -1,12 +1,65 @@
 #!/bin/bash
 
+user_dir="/home/"$(whoami)
+mkdir -p $user_dir"/.config/rsshync/"
+connections_file=$user_dir"/.config/rsshync/connections"
+touch $connections_file
+
 function help_menu() {
-  echo -e "\n\n"
+  echo
   echo -e "\t rsshync commands: \n"
   echo -e "\t\t --help       Displays this page of commands"
   #echo -e "\t\t --help-eg    Displays a list of example commands"
   #echo -e "\t\t --status     Checks the ssh status of a connection"
   #echo -e "\t\t --add        Add a rsshync connection: rsshync --add [HOST@ADDRESS] {PORT}"
   #echo -e "\t\t a"
+
+  echo -e "\t\t Current use: rsshync /path/to/dir [HOST@ADDRESS] {PORT}"
+  echo
+
   return 0
+}
+function install_packages() {
+  echo "Installing packages"
+  if [[ ! -z $(which yay) ]]; then
+    yay -S --noconfirm rsync openssh   
+  elif [[ ! -z $(which pacman) ]]; then
+    sudo pacman -S --noconfirm rsync openssh   
+  elif [[ ! -z $(which apt) ]]; then
+    sudo apt install -y rsync openssh   
+  fi
+}
+function add_connections() {
+  if [[ -z $1 ]]; then exit; fi
+  test_ssh $1 
+  err_code=$?
+  if [[ $err_code == 0 ]]; then
+    echo "Connection to $1 was successful, adding to your list of connections"
+    no_duplicates $1
+  else
+    echo "Connection to $1 failed, make sure your address, host, and port are all correct. E.G. USER@IP_ADDRESS:PORT"
+  fi
+}
+
+function test_ssh() {
+  ssh -q $1 exit
+  return $?
+}
+
+function no_duplicates() {
+  array=()
+  while read -r LINE; do
+    if [[ $1 == $LINE  || $LINE == "LIST OF CONNECTIONS" ]]; then
+      continue;
+    fi
+    array+=("$LINE")
+  done < $connections_file
+  array+=("$1")
+  echo "LIST OF CONNECTIONS" > $connections_file
+  for connection in "${array[@]}"; do
+    echo $connection >> $connections_file
+  done
+}
+function status_of_connections() {
+  echo "good enough i suppose"
 }

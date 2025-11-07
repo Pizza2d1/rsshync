@@ -1,16 +1,63 @@
 #!/bin/bash
-
+#
+# Var declaration
+VERSION="1.0.1"
 source functions
-if [[ -z $1 ]] || [[ $1 == "--help" ]]; then 
+
+if [[ -z $(which ssh) || -z $(which rsync) ]]; then 
+  echo "The required pacakges are not installed (rsync, openssh)"
+  read -p "Would you like to automcatically install the packages? [Y/n]: " uinput 
+  if [[ -z $uinput || $uinput == "n" || $uinput == "N" ]]; then 
+    install_packages
+  fi
+fi
+
+if [[ -z $1 ]]; then 
   help_menu
 fi
 
-
-
-
-
-
-
-
-
+#Lists the different options that the user can choose from, "hmast" is for individual letters options like "-h" and "-m"
+options=$(getopt -o ha,help,add --long "help,status,delete" -- "$@")
+[ $? -eq 0 ] || {
+    echo "Incorrect options provided"
+    exit 1
+}
+eval set -- "$options"
+while true; do
+    case "$1" in
+      --help)
+          help_menu
+          exit;;
+      -h | -help)
+          help_menu
+          exit;;
+      -a | -add)
+          shift;
+          while true; do 
+            shift;
+            add_connections $1
+            if [[ -z $1 ]]; then
+              exit;
+            fi
+          done;
+          exit;;
+      --status)				          
+          shift;	            
+          status_of_connections
+          exit;;
+      --delete)				          
+          shift;	            
+          echo "Not added yet"
+          exit;;
+      --version)              #Will display current version)
+          shift;
+          echo $VERSION
+          exit;;
+      --)
+          shift
+          break
+        ;;
+    esac
+    shift
+done
 
