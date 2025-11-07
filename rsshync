@@ -17,7 +17,7 @@ if [[ -z $1 ]]; then
 fi
 
 #Lists the different options that the user can choose from, "hmast" is for individual letters options like "-h" and "-m"
-options=$(getopt -o ha,help,add --long "help,status,delete" -- "$@")
+options=$(getopt -o hasdv,help,add,status,set,delete,version --long "help,status,set,delete,version" -- "$@")
 [ $? -eq 0 ] || {
     echo "Incorrect options provided"
     exit 1
@@ -25,13 +25,14 @@ options=$(getopt -o ha,help,add --long "help,status,delete" -- "$@")
 eval set -- "$options"
 while true; do
     case "$1" in
-      --help)
+      -h | -help | --help)
           help_menu
           exit;;
-      -h | -help)
-          help_menu
+      -v | -version | --version)              #Will display current version)
+          shift;
+          echo $VERSION
           exit;;
-      -a | -add)
+      -a | -add | --add)
           shift;
           while true; do 
             shift;
@@ -41,20 +42,34 @@ while true; do
             fi
           done;
           exit;;
-      --status)				          
+      -s | -status | --status)				          
           shift;	            
           status_of_connections
           exit;;
-      --delete)				          
+      -d | -delete | --delete)				          
           shift;	            
-          echo "Not added yet"
+          shift;	            
+          if [[ -z $1 ]]; then
+            echo "Please make sure to add the connection(s) you want to delete";
+            exit;
+          fi
+          while true; do
+            delete_connections $1
+            if [[ -z $1 ]]; then
+              echo "Please make sure to add the connection(s) you want to delete";
+              exit;
+            fi
+            shift;	            
+          done
           exit;;
-      --version)              #Will display current version)
-          shift;
-          echo $VERSION
+      -set | --set)				          
+          shift;	            
+          shift;	            
+          set_connections $@
           exit;;
       --)
           shift
+          echo "Invalid option"
           break
         ;;
     esac

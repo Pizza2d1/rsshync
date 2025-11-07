@@ -1,10 +1,18 @@
 #!/bin/bash
 
+# Var declaration
 user_dir="/home/"$(whoami)
-mkdir -p $user_dir"/.config/rsshync/"
 connections_file=$user_dir"/.config/rsshync/connections"
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+# Initialization
+mkdir -p $user_dir"/.config/rsshync/"
 touch $connections_file
 
+
+## FUNCTIONS ##
 function help_menu() {
   echo
   echo -e "\t rsshync commands: \n"
@@ -31,6 +39,12 @@ function install_packages() {
 }
 function add_connections() {
   if [[ -z $1 ]]; then exit; fi
+  while read -r LINE; do
+    if [[ $1 == $LINE ]]; then
+      echo -e "$LINE already added to connections file";
+      return;
+    fi
+  done < $connections_file
   test_ssh $1 
   err_code=$?
   if [[ $err_code == 0 ]]; then
@@ -42,7 +56,22 @@ function add_connections() {
 }
 
 function test_ssh() {
-  ssh -q $1 exit
+  if [[ "$1" =~ "@" ]]; then
+    HOST=$(echo "$1" | sed 's/@.*//')
+    echo $HOST
+  fi
+  ADDR=$(echo "$1" | sed 's/^.*@//' | sed 's/:.*//')
+  echo $ADDR
+  if [[ "$1" =~ ":" ]]; then
+    PORT=$(echo "$1" | sed 's/^.*://')
+    echo $PORT
+  fi
+
+  if [[ ! -z $PORT ]]; then
+    ssh -q -p $PORT $HOST$ADDR exit
+  else
+    ssh -q $HOST$ADDR exit
+  fi
   return $?
 }
 
@@ -60,6 +89,103 @@ function no_duplicates() {
     echo $connection >> $connections_file
   done
 }
+
 function status_of_connections() {
-  echo "good enough i suppose"
+  connections_arr=() # I have to make a array for this rather than just reading the file or else I get race conditions
+  while read -r LINE; do
+    if [[ ! $LINE == "LIST OF CONNECTIONS" ]]; then
+      connections_arr+=($LINE)
+    fi
+  done < $connections_file
+
+  if [[ ${#connections_arr[@]} == 0 ]]; then
+    echo "No connections are currently added"
+    exit;
+  fi
+  echo -e "-------------------------------------" 
+  for LINE in "${connections_arr[@]}"; do
+    test_ssh $LINE
+    if [[ $? == 0 ]]; then
+      echo -e "\t $LINE connection ${GREEN}OK${NC}"
+    else
+      echo -e "\t $LINE connection ${RED}BAD${NC}"
+    fi
+  done
+  echo -e "-------------------------------------" 
+}
+
+function delete_connections() {
+  if [[ -z $1 ]]; then exit; fi
+  array=()
+  check_delete=0
+  while read -r LINE; do
+    if [[ $LINE == "LIST OF CONNECTIONS" ]]; then
+      continue;
+    elif [[ $1 == $LINE ]]; then
+      check_delete=1
+      continue;
+    fi
+    array+=("$LINE")
+  done < $connections_file
+
+  if [[ "${#array[@]}" == "0" && $check_delete == 0 ]]; then
+    echo "Your list of connections is currently empty"
+    exit;
+  fi
+
+  echo "LIST OF CONNECTIONS" > $connections_file
+  for connection in "${array[@]}"; do
+    echo $connection >> $connections_file
+  done
+
+  if [[ $check_delete == 1 ]]; then
+    echo "Deleted $LINE from connections\n"
+    echo -e "New list of connections"
+    list_connections
+  else
+    echo "No connection was deleted"
+  fi
+}
+
+
+function set_connections() {
+  connection_array=()
+  selected_connections=()
+  if [[ $1 == "all" ]]; then
+    while read -r LINE; do
+      if [[ $LINE == "LIST OF CONNECTIONS" ]]; then
+        continue;
+      fi
+      selected_connections+=("$LINE")
+    done < $connections_file
+  else
+    while read -r LINE; do
+      if [[ $LINE == "LIST OF CONNECTIONS" ]]; then
+        continue;
+      fi
+      connections_array+=("$LINE")
+    done < $connections_file
+    echo "\nSelect connections you want to backup to:"
+    list_connections
+    read -p "Connection #: " uinput
+    while [[ ! -z $uinput ]]; do
+      echo "balls"
+      read -p "Correct?: " uinput
+    done
+  fi
+
+}
+
+function list_connections() {
+    echo -e "-------------------------------------" 
+    while read -r LINE; do
+      if [[ $LINE == "LIST OF CONNECTIONS" ]]; then
+        continue;
+      fi
+      array+=("$LINE")
+    done < $connections_file
+    for item in "${array[@]}"; do
+      echo $item
+    done
+    echo -e "-------------------------------------" 
 }
