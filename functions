@@ -165,12 +165,19 @@ function set_connections() {
       fi
       connections_array+=("$LINE")
     done < $connections_file
-    echo "\nSelect connections you want to backup to:"
-    list_connections
+    echo -e "\nSelect connections you want to backup to:"
+    list_connections_numbered
     read -p "Connection #: " uinput
     while [[ ! -z $uinput ]]; do
-      echo "balls"
-      read -p "Correct?: " uinput
+      selected_ip="${connections_array[$(( uinput-1 ))]}"
+      local balls=$(check_if_in_array $selected_ip)
+      if [[ $balls == 0 ]]; then
+        selected_connections+=("$selected_ip")
+      else
+        selected_connections=("${selected_connections[@]/$selected_ip}")
+      fi
+      list_connections_numbered
+      read -p "Connection #: " uinput
     done
   fi
 
@@ -186,6 +193,37 @@ function list_connections() {
     done < $connections_file
     for item in "${array[@]}"; do
       echo $item
+    done
+    echo -e "-------------------------------------" 
+}
+
+function check_if_in_array() {
+    for i in $(seq 0 $(( ${#selected_connections[@]}-1 ))); do
+      if [[ "$1" == "${selected_connections[i]}" ]]; then
+        echo 1
+        return
+      fi
+    done
+    echo 0
+    return
+}
+
+function list_connections_numbered() {
+    echo -e "-------------------------------------" 
+    for i in $(seq 0 $(( ${#connections_array[@]}-1 ))); do
+      mark=0
+      for selected in "${selected_connections[@]}"; do
+        if [[ "$selected" == "${connections_array[i]}" ]]; then
+          mark=1
+        fi
+      done
+      
+      num=$(( i+1 ))
+      if [[ $mark -eq 1 ]]; then
+        echo -e "$num.\t ${GREEN}${connections_array[i]}${NC}"
+      else
+        echo -e "$num.\t ${connections_array[i]}"
+      fi
     done
     echo -e "-------------------------------------" 
 }

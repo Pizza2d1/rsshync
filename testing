@@ -1,14 +1,12 @@
 #!/bin/bash
-IP="192.168.0.23:22"
 
-if [[ "$IP" =~ "@" ]]; then
-  HOST=$(echo "$IP" | sed 's/@.*//')
-  echo $HOST
-fi
-ADDR=$(echo "$IP" | sed 's/^.*@//' | sed 's/:.*//')
-echo $ADDR
-if [[ "$IP" =~ ":" ]]; then
-  PORT=$(echo "$IP" | sed 's/^.*://')
-  echo $PORT
-fi
+
+balls="hello"
+function b() {
+  balls="a"
+}
+
+echo $balls
+b
+echo $balls
 
