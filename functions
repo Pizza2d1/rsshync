@@ -1,15 +1,20 @@
 #!/bin/bash
 
 # Var declaration
-user_dir="/home/"$(whoami)
-connections_file=$user_dir"/.config/rsshync/connections"
+USER=$(whoami)
+USER_DIR="/home/"$USER
+connections_file=$USER_DIR"/.config/rsshync/connections"
+backup_config_file=$USER_DIR"/.config/rsshync/backup.conf"
+port=22 # might change
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
+re='^[0-9]+$'
 
 # Initialization
-mkdir -p $user_dir"/.config/rsshync/"
+mkdir -p $USER_DIR"/.config/rsshync/"
 touch $connections_file
+touch $backup_config_file
 
 
 ## FUNCTIONS ##
@@ -18,8 +23,8 @@ function help_menu() {
   echo -e "\t rsshync commands: \n"
   echo -e "\t\t --help       Displays this page of commands"
   #echo -e "\t\t --help-eg    Displays a list of example commands"
-  #echo -e "\t\t --status     Checks the ssh status of a connection"
-  #echo -e "\t\t --add        Add a rsshync connection: rsshync --add [HOST@ADDRESS] {PORT}"
+  echo -e "\t\t --status     Checks the ssh status of all connections"
+  echo -e "\t\t --add        Add a rsshync connection: rsshync --add [HOST@ADDRESS] {PORT}"
   #echo -e "\t\t a"
 
   echo -e "\t\t Current use: rsshync /path/to/dir [HOST@ADDRESS] {PORT}"
@@ -37,25 +42,58 @@ function install_packages() {
     sudo apt install -y rsync openssh   
   fi
 }
+function install_ncdu_over_ssh() {
+  echo "Installing packages"
+  
+  ssh -p $port $selected_ip "             \
+  if [[ ! -z \$(which yay) ]]; then       \
+    echo 'yay';                           \
+    yay -S --noconfirm ncdu;              \
+  elif [[ ! -z \$(which pacman) ]]; then  \
+    echo 'pacman';                        \
+    sudo pacman -S --noconfirm ncdu;      \
+  elif [[ ! -z \$(which apt) ]]; then     \
+    echo 'apt';                           \
+    sudo apt install -y ncdu;             \
+  fi"
+}
 function add_connections() {
-  if [[ -z $1 ]]; then exit; fi
+  if [[ $1 == 'test' ]]; then
+    echo "Connection to $1 was successful, adding to your list of connections"
+    test_ssh "pizza2d1@127.0.0.1" 
+    no_duplicates "pizza2d1@127.0.0.1"
+    exit;
+  fi
+
+  if [[ -z $1 ]]; then
+    read -p "What connection would you like to add? (\"format\" for help): " uinput
+    while [[ "$uinput" == "format" ]]; do
+      echo -e "\nFormat for connection:\n\t{HOST@}IP_ADDRESS{:PORT}\n\ne.g.\tpizza2d1@192.168.0.123:22, 192.168.0.123:22, pizza2d1@192.168.0.123, and 192.168.0.123 are all valid connections"
+      read -p "What connection would you like to add? (\"format\" for help): " uinput
+    done
+    connection_to_add=$uinput
+  else
+    connection_to_add=$1
+  fi
   while read -r LINE; do
-    if [[ $1 == $LINE ]]; then
+    if [[ $connection_to_add == $LINE ]]; then
       echo -e "$LINE already added to connections file";
       return;
     fi
   done < $connections_file
-  test_ssh $1 
+  test_ssh $connection_to_add
   err_code=$?
   if [[ $err_code == 0 ]]; then
-    echo "Connection to $1 was successful, adding to your list of connections"
+    echo "Connection to $connection_to_add was successful, adding to your list of connections"
     no_duplicates $1
   else
-    echo "Connection to $1 failed, make sure your address, host, and port are all correct. E.G. USER@IP_ADDRESS:PORT"
+    echo "Connection to $connection_to_add failed, make sure your address, host, and port are all correct. E.G. USER@IP_ADDRESS:PORT"
   fi
 }
 
 function test_ssh() {
+  HOST="${USER}"
+  PORT="22"
   if [[ "$1" =~ "@" ]]; then
     HOST=$(echo "$1" | sed 's/@.*//')
     echo $HOST
@@ -66,24 +104,33 @@ function test_ssh() {
     PORT=$(echo "$1" | sed 's/^.*://')
     echo $PORT
   fi
-
-  if [[ ! -z $PORT ]]; then
-    ssh -q -p $PORT $HOST$ADDR exit
-  else
-    ssh -q $HOST$ADDR exit
-  fi
+  echo "ssh -q -p PORT \"${HOST}@${ADDR}\" exit"
+  ssh -q -p $PORT "${HOST}@${ADDR}" exit
   return $?
+}
+
+function get_host-addr-port() {
+  HOST="${USER}"
+  PORT="22"
+  if [[ "$1" =~ "@" ]]; then
+    HOST=$(echo "$1" | sed 's/@.*//')
+  fi
+  ADDR=$(echo "$1" | sed 's/^.*@//' | sed 's/:.*//')
+  if [[ "$1" =~ ":" ]]; then
+    PORT=$(echo "$1" | sed 's/^.*://')
+  fi
 }
 
 function no_duplicates() {
   array=()
   while read -r LINE; do
-    if [[ $1 == $LINE  || $LINE == "LIST OF CONNECTIONS" ]]; then
+    if [[ "${HOST}@${ADDR}:${PORT}" == $LINE  || $LINE == "LIST OF CONNECTIONS" ]]; then
       continue;
     fi
     array+=("$LINE")
   done < $connections_file
-  array+=("$1")
+  get_display_ip
+  array+=("$display_ip")
   echo "LIST OF CONNECTIONS" > $connections_file
   for connection in "${array[@]}"; do
     echo $connection >> $connections_file
@@ -91,37 +138,49 @@ function no_duplicates() {
 }
 
 function status_of_connections() {
-  connections_arr=() # I have to make a array for this rather than just reading the file or else I get race conditions
-  while read -r LINE; do
-    if [[ ! $LINE == "LIST OF CONNECTIONS" ]]; then
-      connections_arr+=($LINE)
-    fi
-  done < $connections_file
-
-  if [[ ${#connections_arr[@]} == 0 ]]; then
+  get_connections
+  if [[ ${#connections_array[@]} == 0 ]]; then
     echo "No connections are currently added"
     exit;
   fi
   echo -e "-------------------------------------" 
-  for LINE in "${connections_arr[@]}"; do
+  for LINE in "${connections_array[@]}"; do
     test_ssh $LINE
+    get_display_ip
     if [[ $? == 0 ]]; then
-      echo -e "\t $LINE connection ${GREEN}OK${NC}"
+      echo -e "\t $display_ip connection ${GREEN}OK${NC}"
     else
-      echo -e "\t $LINE connection ${RED}BAD${NC}"
+      echo -e "\t $display_ip connection ${RED}BAD${NC}"
     fi
   done
   echo -e "-------------------------------------" 
 }
 
 function delete_connections() {
-  if [[ -z $1 ]]; then exit; fi
+  if [[ -z $1 ]]; then
+    uinput="penis"
+    while [[ ! -z uinput ]]; do
+      get_connections
+      list_connections_numbered
+      read -p "What connection would you like to delete? Number: " uinput
+      get_number_as_uinput
+      connection_to_delete=${connections_array[$(( uinput-1 ))]}
+      delete $connection_to_delete  
+    done
+  else
+    connection_to_delete=$1
+    delete $connection_to_delete  
+  fi
+
+}
+
+function delete() {
   array=()
   check_delete=0
   while read -r LINE; do
     if [[ $LINE == "LIST OF CONNECTIONS" ]]; then
       continue;
-    elif [[ $1 == $LINE ]]; then
+    elif [[ $connection_to_delete == $LINE ]]; then
       check_delete=1
       continue;
     fi
@@ -147,28 +206,17 @@ function delete_connections() {
   fi
 }
 
-
 function set_connections() {
   connection_array=()
   selected_connections=()
   if [[ $1 == "all" ]]; then
-    while read -r LINE; do
-      if [[ $LINE == "LIST OF CONNECTIONS" ]]; then
-        continue;
-      fi
-      selected_connections+=("$LINE")
-    done < $connections_file
+    get_connections
   else
-    while read -r LINE; do
-      if [[ $LINE == "LIST OF CONNECTIONS" ]]; then
-        continue;
-      fi
-      connections_array+=("$LINE")
-    done < $connections_file
+    get_connections
     echo -e "\nSelect connections you want to backup to:"
     list_connections_numbered
     read -p "Connection #: " uinput
-    while [[ ! -z $uinput ]]; do
+    while [[ ! -z $uinput && $uinput =~ $re ]]; do
       selected_ip="${connections_array[$(( uinput-1 ))]}"
       local balls=$(check_if_in_array $selected_ip)
       if [[ $balls == 0 ]]; then
@@ -179,18 +227,54 @@ function set_connections() {
       list_connections_numbered
       read -p "Connection #: " uinput
     done
-  fi
+    if [[ ${#selected_connections[@]} == 0 ]]; then
+      echo "No selections were chosen"
+      exit;
+    fi
+    for selected_connection in "${selected_connections[@]}"; do
+      read -p "What remote directory do you want to back up to? (Default: ~/rsshync_backup): " uinput
+      get_default_backup_dir
+      if [[ -z $uinput ]]; then
+        remote_dir="rsshync_backup"
+        echo "Backing up ${local_backup_dir} to ${selected_connection}'s ~/rsshync_backup directory"
+        get_host-addr-port "${selected_connection}"
+        test_remote_dir $remote_dir
+        rsync -azvp -e "ssh -p ${PORT}" $local_backup_dir ${HOST}@${ADDR}:${remote_dir}"/" 
+      else
+        remote_dir=$uinput
+        echo "Backing up ${local_backup_dir} to ${selected_connection}'s $remote_dir directory"
+        get_host-addr-port "${selected_connection}"
+        test_remote_dir $remote_dir
+        if [[ ! $? -eq 0 ]]; then
+          echo "Something went wrong, make sure your path is correct"
+          continue
+        fi
+        rsync -azvp -e "ssh -p ${PORT}" $local_backup_dir ${HOST}@${ADDR}:${remote_dir}"/" 
+      fi
 
+
+    done
+  fi
 }
+
+function test_remote_dir() {
+  if [[ $(ssh -p ${PORT} ${HOST}@${ADDR} "if [[ -d $1 ]]; then echo 0; fi") == "0" ]]; then
+    return 0
+  else
+    echo "Remote directory does not exist"
+    read -p "Would you like to create the remote directory?: [Y/n]" uinput
+    if [[ -z $uinput || $uinput == "y" || $uinput == "Y" ]]; then 
+      ssh -p ${PORT} ${HOST}@${ADDR} "mkdir $1"
+      return $?
+    fi
+    return 1
+  fi
+}
+
 
 function list_connections() {
     echo -e "-------------------------------------" 
-    while read -r LINE; do
-      if [[ $LINE == "LIST OF CONNECTIONS" ]]; then
-        continue;
-      fi
-      array+=("$LINE")
-    done < $connections_file
+    get_connections
     for item in "${array[@]}"; do
       echo $item
     done
@@ -226,4 +310,77 @@ function list_connections_numbered() {
       fi
     done
     echo -e "-------------------------------------" 
+}
+
+
+function scope_connections() {
+  connection_array=()
+  selected_connections=()
+  get_connections
+  echo -e "\nSelect connection you want to scope:"
+  list_connections_numbered
+  read -p "Connection #: " uinput
+  get_number_as_uinput
+  selected_ip="${connections_array[$(( uinput-1 ))]}"
+
+  list_connection_dirs
+
+  read -p "What folder would you like to open?: " selected_dir
+  ssh -C $selected_ip ncdu -o- --enable-delete $selected_dir | ncdu -f- 
+  if [[ ! $? == 0 ]]; then
+    echo "Please installl ncdu on your destination machine for file directory navigation"
+    read -p "Would you like to automatically install the package (ncdu) on your machine? [Y/n]: " uinput
+    if [[ -z $uinput || $uinput == "n" || $uinput == "N" ]]; then 
+      install_ncdu_over_ssh
+    fi
+  fi
+}
+
+function list_connection_dirs() {
+  ssh $selected_ip "ls -l ~"   
+}
+
+function get_connections() {
+  while read -r LINE; do
+    if [[ $LINE == "LIST OF CONNECTIONS" ]]; then
+      continue;
+    fi
+    connections_array+=("$LINE")
+  done < $connections_file
+}
+function get_display_ip() {
+  if [[ -z $HOST && -z $PORT ]]; then
+    display_ip="${USER}@${ADDR}:22"
+  elif [[ -z $PORT ]]; then
+    display_ip="${HOST}@${ADDR}:22"
+  elif [[ -z $HOST ]]; then
+    display_ip="${USER}@${ADDR}:${PORT}"
+  else
+    display_ip="${HOST}@${ADDR}:${PORT}"
+  fi
+}
+
+function get_number_as_uinput() {
+  while [[ -z $uinput && ! $uinput =~ $re ]]; do
+    read -p "Please input a number: " uinput
+  done
+}
+
+function get_default_backup_dir() {
+  while read -r LINE; do
+    ConfigText+=("$LINE")
+  done < "$backup_config_file"
+  echo "${ConfigText[0]}"
+  if [[ -z "${ConfigText[0]}" ]]; then
+    read -p "default backup folder is missing, what would you like it to be? (Default /home/${USER}): " uinput
+    if [[ -z $uinput ]]; then
+      echo "/home/${USER}" > $backup_config_file
+      local_backup_dir="/home/${USER}"
+    else
+      mkdir $uinput
+      echo $uinput > $backup_config_file
+      local_backup_dir=$uinput
+    fi 
+  fi
+  local_backup_dir="${ConfigText[0]}"
 }

@@ -19,7 +19,7 @@ if [[ -z $1 ]]; then
 fi
 
 #Lists the different options that the user can choose from, "hmast" is for individual letters options like "-h" and "-m"
-options=$(getopt -o hasdv,help,add,status,set,delete,version --long "help,status,set,delete,version" -- "$@")
+options=$(getopt -o hasdv,help,add,status,set,scope,delete,version --long "help,status,set,scope,delete,version" -- "$@")
 [ $? -eq 0 ] || {
     echo "Incorrect options provided"
     exit 1
@@ -36,13 +36,8 @@ while true; do
           exit;;
       -a | -add | --add)
           shift;
-          while true; do 
-            shift;
-            add_connections $1
-            if [[ -z $1 ]]; then
-              exit;
-            fi
-          done;
+          shift;
+          add_connections $1
           exit;;
       -s | -status | --status)				          
           shift;	            
@@ -51,10 +46,10 @@ while true; do
       -d | -delete | --delete)				          
           shift;	            
           shift;	            
-          if [[ -z $1 ]]; then
-            echo "Please make sure to add the connection(s) you want to delete";
-            exit;
-          fi
+          #if [[ -z $1 ]]; then
+          #  echo "Please make sure to add the connection(s) you want to delete";
+          #  exit;
+          #fi
           while true; do
             delete_connections $1
             if [[ -z $1 ]]; then
@@ -69,9 +64,14 @@ while true; do
           shift;	            
           set_connections $@
           exit;;
+      -scope | --scope)				          
+          shift;	            
+          shift;	            
+          scope_connections
+          exit;;
       --)
           shift
-          echo "Invalid option"
+          #echo "Invalid option"
           break
         ;;
     esac
